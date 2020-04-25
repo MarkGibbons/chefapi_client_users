@@ -48,6 +48,7 @@ var jwtKey = []byte("my_secret_key") // TODO: Parameter for production
 func main() {
 	flagInit()
 	// users - global chef users 
+	// DELETE - Delete a user
 	// GET - list of all global users
 	// POST - Add a chef user with body
 	// orgusers - all organizations and users in those organizations
@@ -86,7 +87,7 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify a logged in user made the request
-	_, code := loggedIn(r)
+	username, code := loggedIn(r)
 	if code != -1 {
 		fmt.Printf("Can't verify the user status: %+v\n", code)
 		w.WriteHeader(code)
@@ -95,6 +96,17 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Route by method %+v\n",r.Method)
 	switch r.Method {
+	case "DELETE":
+		fmt.Printf("Delete user\n")
+	        client := chefapi_client.Client()
+		err := client.Users.Delete(username)
+		fmt.Printf("Delete %+v Err %+v\n", username, err)
+		if err != nil {
+		        w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
 	case "GET":
 		// Extract the user list
 		users, err := allUsers(filters)
@@ -122,6 +134,14 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 		        w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
+                // verify the username = the authenticated name
+		if username != user.UserName {
+		        fmt.Printf("Not authorized to add other users %+v %+v\n", username, user.UserName)
+		        w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
 		userresult, err := client.Users.Create(user)
 		fmt.Printf("Create user %+v Err %+v\n", user, err)
 		if err != nil {
@@ -137,6 +157,7 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 		w.Write(userJSON)
 		return
 	}
+
 	return
 }
 
@@ -272,18 +293,16 @@ func addOrgUser(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 		// Verify a logged in user made the request
-		// TODO: logged in = add user? should be, use one value for user in the code
 		username, code := loggedIn(r)
 		if code != -1 {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		// POST update a user
-		var user chef.User
-		err = json.NewDecoder(r.Body).Decode(&user)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		// the authenicated user can only add themself
+		user := vars["user"]
+		if user != username {
+			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
 
@@ -299,12 +318,13 @@ func addOrgUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = postUser(org, user)
+		err = addAssociation(org, user)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+		return
 	default:
 	}
 	return
@@ -353,6 +373,13 @@ func allOrgAdmins(orgs []string, filters UserFilters) (orgusers OrgUsers, err er
 func postUser(organization string, user chef.User) (err error) {
 	client := chefapi_client.OrgClient(organization)
 	_, err = client.Users.Create(user)
+	return
+}
+
+func addAssociation(organization string, user string) (err error) {
+	adduser := chef.AddNow{ Username: user }
+	client := chefapi_client.OrgClient(organization)
+	err = client.Associations.Add(adduser)
 	return
 }
 
