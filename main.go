@@ -7,14 +7,12 @@ import (
 	"fmt"
 	"github.com/MarkGibbons/chefapi_client"
 	"github.com/MarkGibbons/chefapi_lib"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/go-chef/chef"
 	"github.com/gorilla/mux"
 	"log"
 	"net"
 	"net/http"
 	"regexp"
-	"strings"
 )
 
 type restInfo struct {
@@ -36,25 +34,18 @@ type UserList struct {
 	Users        []string `json:"users"`
 }
 
-type Claims struct {
-	Username string `json:"username"`
-	jwt.StandardClaims
-}
-
 var flags restInfo
-
-var jwtKey = []byte("my_secret_key") // TODO: Parameter for production
 
 func main() {
 	flagInit()
-	// users - global chef users 
+	// users - global chef users
 	// DELETE - Delete a user
 	// GET - list of all global users
 	// POST - Add a chef user with body
 	// orgusers - all organizations and users in those organizations
 	// GET - list of all users in all orgs
 	// orgusers/{org}/users/{user}
-	// POST - Add the user to the organization 
+	// POST - Add the user to the organization
 
 	r := mux.NewRouter()
 	r.HandleFunc("/users", globalUsers)
@@ -62,7 +53,7 @@ func main() {
 	r.HandleFunc("/orgusers", getOrgUsers)
 	r.HandleFunc("/orgusers/{org}/users/{user}", addOrgUser)
 	l, err := net.Listen("tcp4", ":"+flags.Port)
-	if  err  != nil {
+	if err != nil {
 		panic(err.Error())
 	}
 	log.Fatal(http.ServeTLS(l, r, flags.Cert, flags.Key))
@@ -73,9 +64,9 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Global user request\n")
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
-	err := cleanInput(vars)
+	err := chefapi_lib.CleanInput(vars)
 	if err != nil {
-		inputerror(&w)
+		chefapi_lib.InputError(&w)
 		return
 	}
 
@@ -87,22 +78,23 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify a logged in user made the request
-	username, code := loggedIn(r)
+	username, code := chefapi_lib.LoggedIn(r)
 	if code != -1 {
 		fmt.Printf("Can't verify the user status: %+v\n", code)
 		w.WriteHeader(code)
 		return
 	}
 
-	fmt.Printf("Route by method %+v\n",r.Method)
+	fmt.Printf("Route by method %+v\n", r.Method)
 	switch r.Method {
 	case "DELETE":
 		fmt.Printf("Delete user\n")
-	        client := chefapi_client.Client()
+		client := chefapi_client.Client()
 		err := client.Users.Delete(username)
 		fmt.Printf("Delete %+v Err %+v\n", username, err)
 		if err != nil {
-		        w.WriteHeader(http.StatusBadRequest)
+			msg, code := chefapi_lib.ChefStatus(err)
+			http.Error(w, msg, code)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -111,7 +103,8 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 		// Extract the user list
 		users, err := allUsers(filters)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			msg, code := chefapi_lib.ChefStatus(err)
+			http.Error(w, msg, code)
 			return
 		}
 		//  Handle the results and return the json body
@@ -126,26 +119,27 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	case "POST":
 		fmt.Printf("Create user\n")
-	        client := chefapi_client.Client()
+		client := chefapi_client.Client()
 		user := chef.User{}
 		err = json.NewDecoder(r.Body).Decode(&user)
 		if err != nil {
-		        fmt.Printf("Body error user %+v Err %+v\n", user, err)
-		        w.WriteHeader(http.StatusBadRequest)
+			fmt.Printf("Body error user %+v Err %+v\n", user, err)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-                // verify the username = the authenticated name
+		// verify the username = the authenticated name
 		if username != user.UserName {
-		        fmt.Printf("Not authorized to add other users %+v %+v\n", username, user.UserName)
-		        w.WriteHeader(http.StatusForbidden)
+			fmt.Printf("Not authorized to add other users %+v %+v\n", username, user.UserName)
+			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		userresult, err := client.Users.Create(user)
 		fmt.Printf("Create user %+v Err %+v\n", user, err)
 		if err != nil {
-		        w.WriteHeader(http.StatusBadRequest)
+			msg, code := chefapi_lib.ChefStatus(err)
+			http.Error(w, msg, code)
 			return
 		}
 		userJSON, err := json.Marshal(userresult)
@@ -164,9 +158,9 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 func getOrgAdmins(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
-	err := cleanInput(vars)
+	err := chefapi_lib.CleanInput(vars)
 	if err != nil {
-		inputerror(&w)
+		chefapi_lib.InputError(&w)
 		return
 	}
 
@@ -182,7 +176,7 @@ func getOrgAdmins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify a logged in user made the request
-	_, code := loggedIn(r)
+	_, code := chefapi_lib.LoggedIn(r)
 	if code != -1 {
 		fmt.Printf("Can't verify the user status: %+v\n", code)
 		w.WriteHeader(code)
@@ -193,7 +187,7 @@ func getOrgAdmins(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Filters : %+v", filters)
 	var orgList []string
 	if filters.Organization == "" {
-		orgList, err = allOrgs()
+		orgList, err = chefapi_lib.AllOrgs()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -205,7 +199,8 @@ func getOrgAdmins(w http.ResponseWriter, r *http.Request) {
 	// Extract the user list
 	orgAdmins, err := allOrgAdmins(orgList, filters)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		msg, code := chefapi_lib.ChefStatus(err)
+		http.Error(w, msg, code)
 		return
 	}
 
@@ -224,9 +219,9 @@ func getOrgAdmins(w http.ResponseWriter, r *http.Request) {
 func getOrgUsers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
-	err := cleanInput(vars)
+	err := chefapi_lib.CleanInput(vars)
 	if err != nil {
-		inputerror(&w)
+		chefapi_lib.InputError(&w)
 		return
 	}
 
@@ -242,7 +237,7 @@ func getOrgUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify a logged in user made the request
-	_, code := loggedIn(r)
+	_, code := chefapi_lib.LoggedIn(r)
 	if code != -1 {
 		fmt.Printf("Can't verify the user status: %+v\n", code)
 		w.WriteHeader(code)
@@ -253,9 +248,10 @@ func getOrgUsers(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Filters : %+v", filters)
 	var orgList []string
 	if filters.Organization == "" {
-		orgList, err = allOrgs()
+		orgList, err = chefapi_lib.AllOrgs()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			msg, code := chefapi_lib.ChefStatus(err)
+			http.Error(w, msg, code)
 			return
 		}
 	} else {
@@ -265,7 +261,8 @@ func getOrgUsers(w http.ResponseWriter, r *http.Request) {
 	// Extract the user list
 	orgUsers, err := allOrgUsers(orgList, filters)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		msg, code := chefapi_lib.ChefStatus(err)
+		http.Error(w, msg, code)
 		return
 	}
 
@@ -284,16 +281,16 @@ func getOrgUsers(w http.ResponseWriter, r *http.Request) {
 func addOrgUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
-	err := cleanInput(vars)
+	err := chefapi_lib.CleanInput(vars)
 	if err != nil {
-		inputerror(&w)
+		chefapi_lib.InputError(&w)
 		return
 	}
 
 	switch r.Method {
 	case "POST":
 		// Verify a logged in user made the request
-		username, code := loggedIn(r)
+		username, code := chefapi_lib.LoggedIn(r)
 		if code != -1 {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -320,7 +317,8 @@ func addOrgUser(w http.ResponseWriter, r *http.Request) {
 
 		err = addAssociation(org, user)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			msg, code := chefapi_lib.ChefStatus(err)
+			http.Error(w, msg, code)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -344,7 +342,7 @@ func allOrgUsers(orgs []string, filters UserFilters) (orgusers OrgUsers, err err
 		usernames, err := listOrgUsers(client, filters)
 		if err != nil {
 			fmt.Printf("Error listing org users for %+v Err %+v Names %+v\n", org, err, usernames)
-		        orgusers = append(orgusers, userlist)
+			orgusers = append(orgusers, userlist)
 			continue
 		}
 		userlist.Users = usernames
@@ -361,7 +359,7 @@ func allOrgAdmins(orgs []string, filters UserFilters) (orgusers OrgUsers, err er
 		usernames, err := listOrgAdmins(client, filters)
 		if err != nil {
 			fmt.Printf("Error listing org admins for %+v Err %+v Names %+v\n", org, err, usernames)
-		        orgusers = append(orgusers, userlist)
+			orgusers = append(orgusers, userlist)
 			continue
 		}
 		userlist.Users = usernames
@@ -377,7 +375,7 @@ func postUser(organization string, user chef.User) (err error) {
 }
 
 func addAssociation(organization string, user string) (err error) {
-	adduser := chef.AddNow{ Username: user }
+	adduser := chef.AddNow{Username: user}
 	client := chefapi_client.OrgClient(organization)
 	err = client.Associations.Add(adduser)
 	return
@@ -457,27 +455,6 @@ func listOrgAdmins(client *chef.Client, filters UserFilters) (userNames []string
 	return userNames, err
 }
 
-func allOrgs() (orgNames []string, err error) {
-	client := chefapi_client.Client()
-	orgList, err := client.Organizations.List()
-	orgNames = make([]string, 0, len(orgList))
-	for k := range orgList {
-		orgNames = append(orgNames, k)
-	}
-	return
-}
-
-func cleanInput(vars map[string]string) (err error) {
-	for _, value := range vars {
-		matched, _ := regexp.MatchString("^[[:word:]]+$", value)
-		if !matched {
-			err = errors.New("Invalid value in the URI")
-			break
-		}
-	}
-	return
-}
-
 func flagInit() {
 	restcert := flag.String("restcert", "", "Rest Certificate File")
 	restkey := flag.String("restkey", "", "Rest Key File")
@@ -490,11 +467,6 @@ func flagInit() {
 	flags.Port = *restport
 	fmt.Printf("Flags used %+v\n", flags)
 	return
-}
-
-func inputerror(w *http.ResponseWriter) {
-	(*w).WriteHeader(http.StatusBadRequest)
-	(*w).Write([]byte(`{"message":"Bad url input value"}`))
 }
 
 func userAllowed(user string, org string) (authorized bool, err error) {
@@ -510,38 +482,5 @@ func userAllowed(user string, org string) (authorized bool, err error) {
 		return
 	}
 	authorized = auth.Auth
-	return
-}
-
-// loggedIn verifies the JWT and extracts the user name
-func loggedIn(r *http.Request) (user string, code int) {
-	// Common routine
-	code = -1
-	reqToken := r.Header.Get("Authorization")
-	fmt.Printf("REQTOKEN %+v\n", reqToken)
-	splitToken := strings.Split(reqToken, "Bearer")
-	// Verify index before using
-	if len(splitToken) != 2 {
-		code = http.StatusUnauthorized
-		return
-	}
-	tknStr := strings.TrimSpace(splitToken[1])
-	claims := &Claims{}
-	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtKey, nil
-	})
-	if err != nil {
-		if err == jwt.ErrSignatureInvalid {
-			code = http.StatusUnauthorized
-			return
-		}
-		code = http.StatusBadRequest
-		return
-	}
-	if !tkn.Valid {
-		code = http.StatusUnauthorized
-		return
-	}
-	user = claims.Username
 	return
 }
