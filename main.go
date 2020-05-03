@@ -37,14 +37,17 @@ type UserList struct {
 var flags restInfo
 
 func main() {
-	flagInit()
+	flagInit()h
 	// users - global chef users
 	// DELETE - Delete a user
 	// GET - list of all global users
 	// POST - Add a chef user with body
+	// orgadmins
+	// GET - list of the admins
 	// orgusers - all organizations and users in those organizations
 	// GET - list of all users in all orgs
 	// orgusers/{org}/users/{user}
+	// DELETE - Remove the user from the organization
 	// POST - Add the user to the organization
 
 	r := mux.NewRouter()
@@ -281,30 +284,39 @@ func getOrgUsers(w http.ResponseWriter, r *http.Request) {
 func addOrgUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	vars := mux.Vars(r)
+	org := vars["org"]
 	err := chefapi_lib.CleanInput(vars)
 	if err != nil {
 		chefapi_lib.InputError(&w)
 		return
 	}
+	// Verify a logged in user made the request
+	username, code := chefapi_lib.LoggedIn(r)
+	if code != -1 {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// the authenicated user can only modify themself
+	user := vars["user"]
+	if user != username {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 
 	switch r.Method {
+	case "DELETE":
+		err = deleteAssociation(org, user)
+		if err != nil {
+			msg, code := chefapi_lib.ChefStatus(err)
+			http.Error(w, msg, code)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+
 	case "POST":
-		// Verify a logged in user made the request
-		username, code := chefapi_lib.LoggedIn(r)
-		if code != -1 {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		// the authenicated user can only add themself
-		user := vars["user"]
-		if user != username {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
-
 		// Verify the user is allowed to join this organizations
-		org := vars["org"]
 		userauth, err := userAllowed(username, org)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -323,6 +335,7 @@ func addOrgUser(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusOK)
 		return
+
 	default:
 	}
 	return
@@ -381,6 +394,12 @@ func addAssociation(organization string, user string) (err error) {
 	return
 }
 
+func deleteAssociation(organization string, user string) (err error) {
+	client := chefapi_client.OrgClient(organization)
+	_, err = client.Associations.Delete(user)
+	return
+}
+
 func listUsers(client *chef.Client, filters UserFilters) (userNames []string, err error) {
 	userList, err := client.Users.List()
 	if err != nil {
@@ -406,7 +425,6 @@ func listUsers(client *chef.Client, filters UserFilters) (userNames []string, er
 func listOrgUsers(client *chef.Client, filters UserFilters) (userNames []string, err error) {
 	fmt.Printf("listOrgUsers\n")
 	userList, err := client.Associations.List()
-	fmt.Printf("Dump org userList %+v Err %+v\n", userList, err)
 	if err != nil {
 		fmt.Printf("Association list failed %+v\n", err)
 		return

@@ -2,16 +2,25 @@
 
 This code provides a go client interface to the chefapi to interact with users.
 Running this code provides a simpler API than the native chef REST API for use by web applications.
+See the chefapi_demo_server repository to see how this code was installed and started.
 
-# Front End Endpoints used by web applications
+## Front End Endpoints used by web applications
 -----------
 
-## GET /users
+### DELETE /users
+=================
+### GET /users
+==============
+### POST /users
+===============
 
-## GET /orgusers
-===========================
+### GET /orgadmins
+=================
 
-### Request
+### GET /orgusers
+=================
+
+#### Request
 Filter values may restrict the returned information to a specific owner of the 
 users and to a specific organization.  If not set users for all users and/or all
 organizations will be returned.
@@ -25,7 +34,7 @@ The request can specify filter values in a json body.
 ````
 
 
-### Return
+#### Return
 The body returned looks like this:
 ````json
 {
@@ -46,13 +55,13 @@ Values
 400 - Invalid request was made
 403 - Unauthorized request was made
 
-## GET /orgusers/ORG/users/NODE
-===========================
+### GET /orgusers/ORG/users/USER
+================================
 
-### Request
+#### Request
 
 
-### Return
+#### Return
 The body returned looks like this:
 ````json
 {
@@ -75,10 +84,10 @@ Values
 400 - Invalid request was made
 403 - Unauthorized request was made
 
-## PUT /orgusers/ORG/users/NODE
-===========================
+### PUT /orgusers/ORG/users/USER
+================================
 
-### Request
+#### Request
 The request body looks like this:
 ````json
 {
@@ -96,20 +105,19 @@ The request body looks like this:
 }
 ````
 
-### Return
-The body returned looks like this:
-````json
-{
-}
+#### Return
+  No body is returned
 ````
 Values
 200 - Node data returned
 400 - Invalid request was made
 403 - Unauthorized request was made
 
-# Back End Chef Infra Server Endpoints used
+## Back End Chef Infra Server Endpoints used
 -----------
 
-## GET /orgusers/ORG/users
-## GET /orgusers/ORG/users/NODE
-## PUT /orgusers/ORG/users/NODE
+### DELETE /Users
+### POST /Users
+### GET /Users
+### POST /Associations
+### GET /Groups/NAME
