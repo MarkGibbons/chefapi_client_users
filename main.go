@@ -37,7 +37,7 @@ type UserList struct {
 var flags restInfo
 
 func main() {
-	flagInit()h
+	flagInit()
 	// users - global chef users
 	// DELETE - Delete a user
 	// GET - list of all global users
