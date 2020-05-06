@@ -69,6 +69,7 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	err := chefapi_lib.CleanInput(vars)
 	if err != nil {
+		fmt.Printf("globalUsewrs - Input error in the REST url %+v\n", err)
 		chefapi_lib.InputError(&w)
 		return
 	}
@@ -83,7 +84,7 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 	// Verify a logged in user made the request
 	username, code := chefapi_lib.LoggedIn(r)
 	if code != -1 {
-		fmt.Printf("Can't verify the user status: %+v\n", code)
+		fmt.Printf("User is not logged in: %+v\n", code)
 		w.WriteHeader(code)
 		return
 	}
@@ -98,6 +99,7 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg, code := chefapi_lib.ChefStatus(err)
 			http.Error(w, msg, code)
+			fmt.Printf("globalUsers Delete User - Error %+v msg %+v code %+v\n", err, msg, code)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -108,6 +110,7 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg, code := chefapi_lib.ChefStatus(err)
 			http.Error(w, msg, code)
+			fmt.Printf("globalUsers Delete User - Error %+v msg %+v code %+v\n", err, msg, code)
 			return
 		}
 		//  Handle the results and return the json body
@@ -143,6 +146,7 @@ func globalUsers(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg, code := chefapi_lib.ChefStatus(err)
 			http.Error(w, msg, code)
+			fmt.Printf("globalUsers POST User - Error %+v msg %+v code %+v\n", err, msg, code)
 			return
 		}
 		userJSON, err := json.Marshal(userresult)
@@ -181,7 +185,7 @@ func getOrgAdmins(w http.ResponseWriter, r *http.Request) {
 	// Verify a logged in user made the request
 	_, code := chefapi_lib.LoggedIn(r)
 	if code != -1 {
-		fmt.Printf("Can't verify the user status: %+v\n", code)
+		fmt.Printf("User is not logged in: %+v\n", code)
 		w.WriteHeader(code)
 		return
 	}
@@ -204,6 +208,7 @@ func getOrgAdmins(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg, code := chefapi_lib.ChefStatus(err)
 		http.Error(w, msg, code)
+		fmt.Printf("getOrgAdmins- Error %+v msg %+v code %+v\n", err, msg, code)
 		return
 	}
 
@@ -242,7 +247,7 @@ func getOrgUsers(w http.ResponseWriter, r *http.Request) {
 	// Verify a logged in user made the request
 	_, code := chefapi_lib.LoggedIn(r)
 	if code != -1 {
-		fmt.Printf("Can't verify the user status: %+v\n", code)
+		fmt.Printf("User is not logged in: %+v\n", code)
 		w.WriteHeader(code)
 		return
 	}
@@ -255,6 +260,7 @@ func getOrgUsers(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg, code := chefapi_lib.ChefStatus(err)
 			http.Error(w, msg, code)
+			fmt.Printf("getOrgUsers- Error %+v msg %+v code %+v\n", err, msg, code)
 			return
 		}
 	} else {
@@ -293,6 +299,7 @@ func addOrgUser(w http.ResponseWriter, r *http.Request) {
 	// Verify a logged in user made the request
 	username, code := chefapi_lib.LoggedIn(r)
 	if code != -1 {
+		fmt.Printf("User is not logged in: %+v\n", code)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -310,6 +317,7 @@ func addOrgUser(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg, code := chefapi_lib.ChefStatus(err)
 			http.Error(w, msg, code)
+			fmt.Printf("addOrgUser DELETE - Error %+v msg %+v code %+v\n", err, msg, code)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -331,8 +339,10 @@ func addOrgUser(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg, code := chefapi_lib.ChefStatus(err)
 			http.Error(w, msg, code)
+			fmt.Printf("addOrgUser POST - Error %+v msg %+v code %+v\n", err, msg, code)
 			return
 		}
+		fmt.Println("Add user to org")
 		w.WriteHeader(http.StatusOK)
 		return
 
